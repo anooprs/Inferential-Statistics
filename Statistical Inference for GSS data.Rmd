@@ -1,0 +1,286 @@
+---
+title: "Data Analysis Project - Statistical inference with the GSS data"
+author: "Anoop"
+date: "8 May 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**SUMMARY**
+
+The following project is the final requirement needed for the completion of course in inferentil Statistics from the online coursera specialization by the Duke University in Statistics with R. The GSS data set will be explored to answer the following question:is there a difference in the education level across the years for people of different sex and race? After exploring the report convincing statistical evidence is found between the relationship of education level and race. Furthermore, it was found that the relationship between education and sex has become insignificant. For this report, the data and question will be stated and explored,finally an exploratory data analysis(EDA) will be done to get a better picture of the data set. A hypothesis testing will be defined and conducted. This project uses a hypothesis test and ANOVA test to strengthen its findings.
+
+**Load required packages**
+
+```{r}
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(scales))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(statsr))
+suppressPackageStartupMessages(library(foreign))
+suppressPackageStartupMessages(library(magrittr))
+suppressPackageStartupMessages(library(viridis))
+suppressPackageStartupMessages(library(forestmodel))
+
+
+```
+
+**Introduction**
+
+The General Social Survey (GSS) is a sociological survey created and regularly collected since 1972 by the National Opinion Research Center at the University of Chicago. It is funded by the National Science Foundation. The GSS collects information and keeps a historical record of the concerns, experiences, attitudes, and practices of residents of the United States.Since 1972, the GSS has been monitoring societal change and studying the growing complexity of American society. It is one of the most influential studies in the social sciences, and is frequently referenced in leading publications, including The New York Times, The Wall Street Journal, and the Associated Press.
+
+The data collected about this survey includes both demographic information and respondents' opinions on matters ranging from government spending to the state of race relations to the existence and nature of God. Because of the wide range of topics covered, and the comprehensive gathering of demographic information, survey results allow social scientists to correlate demographic factors like age, race, gender, and urban/rural upbringing with beliefs, and thereby determine whether, for example, an average middle-aged black male respondent would be more or less likely to move to a different U.S. state for economic reasons than a similarly situated white female respondent; or whether a highly educated person with a rural upbringing is more likely to believe in a transcendent God than a person with an urban upbringing and only a high-school education.
+
+**Part 1: Data**
+
+The General Social Survey (GSS) dataset includes 57,061 cases (rows) and 114 variables (columns) provide by this course. The GSS data was collected by computer-assisted personal interview (CAPI), face-to-face interview and telephone interview of adults (18+) in randomly selected households. Each row corresponds to a person surveyed. From this data the variables that will be used for this report will be years, educ, race, sex.
+
+The GSS is an observational study - with no explicit random assignments to treatments - so all relationships indicated may indication association, but not causation.
+
+#Loading the dataset in SPSS format and converting it to RData using the save()
+
+```{r}
+setwd("D:/coursera")
+load("gss.Rdata.gz")
+```
+
+The variant of the GSS dataset provided for this project contains data on 114 following variables:
+```{r}
+length(names(gss))
+```
+
+**Part 2: Research Question**
+
+**Is there a difference in the education level across the years for people of different sex and race?**
+
+ we are going to answer the question if there exist a difference between white caucasians and people with other ethnic background.
+
+To answer this question a hypothesis test between the education level in 1980 for the different factors and compared the results with the results for the year 2010. In the subsequent analysis, a linear model will be fitted using race and sex as variables to predict education. The significance of each variable will be then analyzed using an ANOVA Test.
+
+**Part 3: Exploratory Data Analysis**
+
+Let's explore the races included in this survey:
+```{r}
+levels(gss$race)
+```
+For simplification let's combine the "black" and "other" races into one single level named "Not White"
+```{r}
+gss <- gss%>%
+    mutate(race = factor(ifelse(race =="White","White","Not White"), 
+                         levels = c("White", "Not White")))
+```
+
+Let's take a look at the distribution of people surveyed by race and by sex:
+
+```{r}
+p1 <- gss %>%
+    ggplot(aes(x = year,y = (..count..)/sum(..count..), fill = race)) + geom_bar(position = "fill") + 
+    scale_y_continuous(labels = percent) + 
+    labs(title = "Percentage of People by Race",
+         y = "Percentage [%]",
+         x = "Year of Survey") + 
+    scale_color_viridis(option = "D")
+
+p2 <- gss %>%
+    ggplot(aes(x = year, y = (..count..)/sum(..count..), fill = sex)) + geom_bar(position = "fill") + 
+    scale_y_continuous(labels = percent) + 
+    labs(title = "Percentage of People by sex",
+         y = "Percentage [%]",
+         x = "Year of Survey") +
+    scale_color_viridis(option = "D")
+
+grid.arrange(p1,p2,nrow = 1)
+```
+** We see that there is a clear difference in the amount of people who were surveyed with the vast majority being white however with a slight decreasing tendency over the years. As for the difference between men and women there is an even distribution between sex across the years being nearly 50/50 **
+
+Now let's see and explore the missing values in the variables we will use for this project
+
+```{r}
+# Race
+raceNA <-sum(is.na(gss$race))
+# Sex
+sexNA <- sum(is.na(gss$sex))
+# Education
+educNA <- sum(is.na(gss$educ))
+
+dt <- data.frame(raceNA,sexNA,educNA)
+kable(dt, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+There are 164 missing values in the educ variable, so let's remove the missing values from it for simplification purposes.
+
+```{r}
+gss <- gss%>%
+    filter(!is.na(educ))
+
+```
+
+**How has the education level changed over the years?**
+
+```{r}
+gss %>%
+    group_by(year)%>%
+    summarise(tmpVar = mean(educ))%>%
+    ggplot(aes(x = year, y = tmpVar)) + geom_line(size = 1, colour = "red") +
+    geom_smooth(method = "lm",se = F) + 
+    labs(y="Average Years of Education",
+         title = "Overall Development in Education")
+
+```
+It is evident that there is an overall positive trend in favor of education. Now we can take a deeper look at this information and check if this trend also applies for people of different sex and race.
+
+```{r}
+gss %>%
+    group_by(year, sex, race) %>%
+    summarise(m = mean(educ)) %>%
+    ggplot(aes(x = year, y = m, color = sex)) + 
+    geom_line(size = 1) + 
+    facet_grid(.~race)+
+    labs(y = "Average Years of Education",
+         title = "Overall Development in Education")
+```
+In this plot it is clear that the overall trend applies to both ethnic groups however a difference between both groups in their education level becomes apparent. To illustrate this we can use a visualization with a box plot taking the years 1980 and 2010.
+
+```{r}
+cbp1 <- c("#999999", "#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+gss %>%
+    filter(year == 1980 | year == 2010) %>%
+    ggplot(aes(x = race, y = educ , fill = sex)) + geom_boxplot() + scale_fill_manual(values = cbp1) +
+    facet_grid(.~year)
+```
+**Part 4: Inference**
+
+In a hypothesis test we start with the null hypothesis which says that there is nothing going on i.e there is no difference in the education level between people of different race and sex. The alternative hypothesis is that there is something going on and hence a difference in the education level.
+
+H0:μ1980−μ2010=0
+
+HA:μ1980−μ2010≠0
+
+**Conditions for inference**
+
+a) Independence: GSS dataset is generated from a random sample survey. We are fine in assuming that the   records are independent. if sampling without replacement, n < 10% of population. 57061 observations certainly <10% American population
+b) Sample size: n ≥ 30, larger if the population distribution is very skewed.
+In order to check condition 2 we can draw a histogram of the variable of interest which in this case is education.
+
+```{r}
+gss %>%
+    ggplot(aes(x = educ, fill = race)) + geom_histogram(binwidth = 1, alpha = 0.6) + 
+    labs(x = "Years of Education", y = "Number of People",
+         title = "Histogram of Education Years") + scale_fill_manual(values = cbp1)
+```
+The distribution for this variable is somewhat left skewed however the number of people surveyed for both ethnic groups is way greater than 30 and so we can assume normality for the further analysis.
+
+**Summary Statistics**
+
+```{r}
+dat <- gss %>%
+    filter(year == 1980 | year == 2010) %>%
+    group_by(race, year) %>%
+    summarise(mean = mean(educ), sd = sd(educ), num = n())
+dat %>% kable("html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+We can compute the standard error associated with the data for this we will define the function computeSE which will take a data frame that contains the standard deviations and the number of observations and compute the SE.
+
+```{r}
+computeSE <- function(dat){
+    sd <- dat$sd
+    n <- dat$num
+    tmp <- sqrt(sd[1]/n[1] + sd[2]/n[2])
+    return(tmp)
+}
+se_1980 <- dat %>%
+    filter(year ==1980) %>%
+    computeSE()
+se_2010 <- dat %>%
+    filter(year ==2010) %>%
+    computeSE()
+```
+
+With the SE we can now compute our t-statistic
+
+```{r}
+computeTStat <- function(dat){
+    mu <- dat$mean
+    tmp <- (mu[1]-mu[2])/computeSE(dat)
+    return(abs(tmp))
+}
+
+tstat_1980 <- dat %>%
+    filter(year == 1980) %>%
+    computeTStat()
+tstat_2010 <- dat %>%
+    filter(year == 2010) %>%
+    computeTStat()
+
+dt <- data.frame(tstat_1980,tstat_2010)
+kable(dt, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+We can compute the p-value i.e. the probability of getting such a t-statistic given that the null hypothesis is true and use an alpha of 95% to evaluate this hypothesis.
+
+```{r}
+computeDOF <- function(dat){
+    n <- dat$num
+    return(min(n)-1)
+}
+dof_1980 <- dat %>%
+    filter(year == 1980) %>%
+    computeDOF()
+dof_2010 <- dat %>%
+    filter(year == 2010) %>%
+    computeDOF()
+
+pval_1980 <- pt(tstat_1980, dof_1980, lower.tail = F)*2
+pval_2010 <- pt(tstat_2010, dof_2010, lower.tail = F)*2
+
+dt <- data.frame(pval_1980,pval_2010)
+kable(dt, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+We see that both values are well below the 5% margin and we can conclude that this data show convincing evidence that there exist a relationship in the difference in education level between white people and people of a different race.
+
+We can continue the analysis and see the linear effect of each variable by fitting two linear models for the years 1980 and 2010 respectively.
+
+```{r}
+dat_1980 <- gss %>%
+    filter(year == 1980)
+modelFit_1980 <- lm(educ ~ race + sex, data = dat_1980)
+dat_2010 <- gss %>%
+    filter(year == 2010)
+modelFit_2010 <- lm(educ ~ race + sex, data = dat_2010)
+```
+
+With this models we can do an ANOVA test for the different years and compare their output.
+
+Side Note: This models are not the best possible models to represent the data as seen with their R2 value of 0.0105738 for the 1980 model and 0.0164921 for the 2010 model.
+
+Taking a look at the output for both models we see that race has a statistical significance seen from the small p-value for both years 1980 and 2010. Sex on the other side is no longer a significant predictor. With a very high p-value in the anova test we see that the variance in education explained by sex is minimal.
+
+```{r}
+summary(modelFit_1980)
+forest_model(modelFit_1980)
+```
+```{r}
+summary(modelFit_2010)
+forest_model(modelFit_2010)
+```
+```{r}
+anova(modelFit_1980)
+```
+
+```{r}
+anova(modelFit_2010)
+```
+**Conclusion**
+
+We have found strong statistical evidence that there is a difference in education level within people of different race. This difference was present as far as 1980 and was still present in the year 2010. Sex on the other hand lost its significance level over the years meaning that there is no strong statistical evidence to reject the null hypothesis.
+
+Since this was an observational study, we can generalize causality but not causation. We can only conclude that there is sufficient correlation between the variables.
